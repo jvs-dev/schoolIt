@@ -3,7 +3,7 @@
 import { Wifi, MonitorSpeaker, Zap, Bot, CheckCircle, Send, Star, Lock, Monitor, Eye, EyeOff, Unlock, Home, Settings, LogOut, Bell, BellOff, Ticket } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { db, messaging } from '../../../lib/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, getDoc, setDoc, arrayUnion } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, getDoc, setDoc, arrayUnion, where } from 'firebase/firestore';
 import { getToken } from 'firebase/messaging';
 
 async function hashPassword(password: string) {
@@ -166,6 +166,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
     }
   };
 
+  
   const navItems = [
     { id: 'tickets', label: 'Tickets Rápidos', icon: Home },
     { id: 'settings', label: 'Configurações', icon: Settings },
@@ -251,46 +252,109 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
           <>
             {/* Stats Row */}
             <div className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white shadow-sm rounded-xl p-4">
-                  <h3 className="text-gray-500 text-sm">Total de Chamados</h3>
-                  <p className="text-2xl font-bold">{todaysTotalTickets}</p>
+              <div className="grid grid-cols-3 gap-2 md:gap-4">
+                <div className="bg-white shadow-sm rounded-xl p-3 md:p-4">
+                  <h3 className="text-gray-500 text-[10px] md:text-sm truncate">Total de Chamados</h3>
+                  <p className="text-lg md:text-2xl font-bold mt-1 md:mt-0">{todaysTotalTickets}</p>
                 </div>
                 
-                <div className="bg-white shadow-sm rounded-xl p-4">
-                  <h3 className="text-gray-500 text-sm">Pendentes</h3>
-                  <p className="text-2xl font-bold text-red-600">{todaysPendingTickets}</p>
+                <div className="bg-white shadow-sm rounded-xl p-3 md:p-4">
+                  <h3 className="text-gray-500 text-[10px] md:text-sm truncate">Pendentes</h3>
+                  <p className="text-lg md:text-2xl font-bold text-red-600 mt-1 md:mt-0">{todaysPendingTickets}</p>
                 </div>
                 
-                <div className="bg-white shadow-sm rounded-xl p-4">
-                  <h3 className="text-gray-500 text-sm">Resolvidos</h3>
-                  <p className="text-2xl font-bold text-green-600">{todaysResolvedTickets}</p>
+                <div className="bg-white shadow-sm rounded-xl p-3 md:p-4">
+                  <h3 className="text-gray-500 text-[10px] md:text-sm truncate">Resolvidos</h3>
+                  <p className="text-lg md:text-2xl font-bold text-green-600 mt-1 md:mt-0">{todaysResolvedTickets}</p>
                 </div>
               </div>
             </div>
             
             {/* Data Table/List */}
-            <div className="flex-1 p-4 overflow-y-auto">
-              <div className="bg-white rounded-xl shadow-sm">
+            <div className="flex-1 p-4">
+              {/* Mobile Card Layout */}
+              <div className="grid grid-cols-1 gap-3 md:hidden">
+                {loading ? (
+                  <div className="text-center py-4 text-slate-500">Carregando...</div>
+                ) : tickets.length === 0 ? (
+                  <div className="text-center py-4 text-slate-500 flex flex-col items-center">
+                    <span>Nenhum chamado encontrado</span>
+                  </div>
+                ) : (
+                  tickets.map(ticket => {
+                    const createdAt = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date();
+                    const formattedTime = createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const formattedDate = createdAt.toLocaleDateString();
+                    
+                    return (
+                      <div key={ticket.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-3">
+                        <div className="flex justify-between items-start">
+                          <span className={`px-2 py-1 rounded-full text-xs ${
+                            ticket.status === 'Pendente' 
+                              ? 'bg-red-100 text-red-700' 
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {ticket.status}
+                          </span>
+                          <div className="text-xs text-slate-400 text-right">
+                            <div>{formattedTime}</div>
+                            <div>{formattedDate}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="font-bold text-slate-800">
+                          {ticket.room || ticket.className} <span className="text-sm font-normal text-slate-500">({ticket.floor || '-'})</span>
+                        </div>
+                        
+                        <div className="text-sm text-slate-600">
+                          {ticket.machine || '-'} | <span className="font-semibold text-slate-700">{ticket.type}</span>
+                        </div>
+                        
+                        {ticket.description && (
+                          <div className="text-sm text-slate-700 bg-slate-50 p-2 rounded">
+                            <p className="truncate max-w-full">{ticket.description}</p>
+                            <button onClick={() => handleViewDetails(ticket.description)} className="mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">Ver Detalhes</button>
+                          </div>
+                        )}
+                        
+                        {ticket.status === 'Pendente' && (
+                          <button 
+                            onClick={() => handleForceResolve(ticket.id)} 
+                            className="w-full py-3 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-center"
+                          >
+                            Marcar como Resolvido
+                          </button>
+                        )}
+                        
+                        <div className="flex gap-2 pt-2">
+                          <button onClick={() => handleDeleteTicket(ticket.id)} className="flex-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Excluir</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              
+              {/* Desktop Table Layout */}
+              <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <table className="w-full">
-                  <thead className="border-b">
+                  <thead className="border-b bg-slate-50">
                     <tr>
-                      <th className="text-left py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Local / Máquina</th>
-                      <th className="text-left py-3 px-4">Problema</th>
-                      <th className="text-left py-3 px-4">Horário</th>
-                      <th className="text-left py-3 px-4">Avaliação</th>
-                      <th className="text-left py-3 px-4">Ações</th>
+                      <th className="text-left py-3 px-4 text-slate-700 font-medium">Status</th>
+                      <th className="text-left py-3 px-4 text-slate-700 font-medium">Local / Máquina</th>
+                      <th className="text-left py-3 px-4 text-slate-700 font-medium">Problema</th>
+                      <th className="text-left py-3 px-4 text-slate-700 font-medium">Horário</th>
+                      <th className="text-left py-3 px-4 text-slate-700 font-medium">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-4 px-4">Carregando...</td>
+                        <td colSpan={5} className="text-center py-8 px-4 text-slate-500">Carregando...</td>
                       </tr>
                     ) : tickets.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-4 px-4">Nenhum chamado encontrado</td>
+                        <td colSpan={5} className="text-center py-8 px-4 text-slate-500">Nenhum chamado encontrado</td>
                       </tr>
                     ) : (
                       tickets.map(ticket => {
@@ -299,7 +363,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
                         const formattedDate = createdAt.toLocaleDateString();
                         
                         return (
-                          <tr key={ticket.id} className="border-b hover:bg-gray-50">
+                          <tr key={ticket.id} className="border-b hover:bg-slate-50 transition-colors">
                             <td className="py-3 px-4">
                               <span className={`px-2 py-1 rounded-full text-xs ${
                                 ticket.status === 'Pendente' 
@@ -310,38 +374,28 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <div className="font-semibold">{ticket.room || ticket.className || '-'} ({ticket.floor})</div>
-                              <div className="text-xs text-gray-500">{ticket.sector} | {ticket.machine}</div>
-                            </td>
-                            <td className="py-3 px-4">{ticket.type}{ticket.description && (
-                              <button onClick={() => handleViewDetails(ticket.description)} className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">Ver Detalhes</button>
-                            )}</td>
-                            <td className="py-3 px-4">
-                              <div>{formattedTime}</div>
-                              <div className="text-gray-500 text-xs">{formattedDate}</div>
+                              <div className="font-semibold text-slate-800">{ticket.room || ticket.className || '-'} <span className="text-slate-500">({ticket.floor})</span></div>
+                              <div className="text-xs text-slate-500">{ticket.sector} | {ticket.machine}</div>
                             </td>
                             <td className="py-3 px-4">
-                              {ticket.status === 'Resolvido' ? (
-                                ticket.evaluation ? (
-                                  <div className="flex items-center">
-                                    <Star size={16} className="text-yellow-400 mr-1" />
-                                    <span className="text-xs">
-                                      {(Object.values<number>(ticket.evaluation).reduce((a: number, b: number) => a + b, 0) / Object.values<number>(ticket.evaluation).length).toFixed(1)}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-400 italic">S/N</span>
-                                )
-                              ) : (
-                                <span className="text-gray-400">-</span>
+                              <div className="font-medium text-slate-700">{ticket.type}</div>
+                              {ticket.description && (
+                                <div className="text-xs text-slate-500 truncate max-w-xs">{ticket.description}</div>
+                              )}
+                              {ticket.description && (
+                                <button onClick={() => handleViewDetails(ticket.description)} className="mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 whitespace-nowrap">Ver Detalhes</button>
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <div className="flex items-center gap-2">
+                              <div className="font-medium">{formattedTime}</div>
+                              <div className="text-xs text-slate-500">{formattedDate}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-col gap-2">
                                 {ticket.status === 'Pendente' && (
-                                  <button onClick={() => handleForceResolve(ticket.id)} className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200">Forçar Baixa</button>
+                                  <button onClick={() => handleForceResolve(ticket.id)} className="text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-200 whitespace-nowrap">Marcar como Resolvido</button>
                                 )}
-                                <button onClick={() => handleDeleteTicket(ticket.id)} className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Excluir</button>
+                                <button onClick={() => handleDeleteTicket(ticket.id)} className="text-xs bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 whitespace-nowrap">Excluir</button>
                               </div>
                             </td>
                           </tr>
@@ -462,11 +516,35 @@ const TeacherDashboardPage = () => {
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [isRegisteringDevice, setIsRegisteringDevice] = useState(false);
   const [deviceData, setDeviceData] = useState({ sector: 'Sala de Aula', floor: 'Térreo', room: '', machine: '' });
+  const [roomTickets, setRoomTickets] = useState<any[]>([]);
 
   useEffect(() => {
     const role = localStorage.getItem('schoolit_role');
     setDeviceRole(role ? (role as any) : 'setup');
   }, []);
+  
+  useEffect(() => {
+    if (deviceRole !== 'teacher') return;
+    const device = JSON.parse(localStorage.getItem('schoolit_device') || '{}');
+    if (!device.id) return;
+    
+    const q = query(collection(db, 'tickets'), where('deviceId', '==', device.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs: any[] = [];
+      snapshot.forEach((doc) => {
+        docs.push({ id: doc.id, ...doc.data() });
+      });
+      // Sort in memory to avoid requiring complex composite indexes in Firestore
+      docs.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setRoomTickets(docs.slice(0, 5));
+    });
+    
+    return () => unsubscribe();
+  }, [deviceRole]);
 
   const handleResetForm = () => {
     setIsSuccess(false);
@@ -524,6 +602,7 @@ const TeacherDashboardPage = () => {
         floor: device.floor || '',
         room: device.room || 'Desconhecida',
         machine: device.machine || '',
+        deviceId: device.id || 'legacy-device',
         status: 'Pendente',
         createdAt: serverTimestamp()
       });
@@ -563,11 +642,7 @@ const TeacherDashboardPage = () => {
     },
   ];
 
-  const recentTickets = [
-    { id: 1, title: 'Problema no Projetor', status: 'Pendente', color: 'bg-red-500' },
-    { id: 2, title: 'Wi-Fi Lento', status: 'Resolvido', color: 'bg-green-500' },
-    { id: 3, title: 'Falta de Cabo HDMI', status: 'Pendente', color: 'bg-red-500' },
-  ];
+
 
   return (
     <>
@@ -695,7 +770,8 @@ const TeacherDashboardPage = () => {
                   <div className="flex flex-col space-y-3 pt-4">
                     <button 
                       onClick={() => {
-                        localStorage.setItem('schoolit_device', JSON.stringify(deviceData));
+                        const newDeviceData = { ...deviceData, id: crypto.randomUUID() };
+                        localStorage.setItem('schoolit_device', JSON.stringify(newDeviceData));
                         localStorage.setItem('schoolit_role', 'teacher');
                         setDeviceRole('teacher');
                       }}
@@ -869,6 +945,7 @@ const TeacherDashboardPage = () => {
                         floor: device.floor || '',
                         room: device.room || 'Desconhecida',
                         machine: device.machine || '',
+                        deviceId: device.id || 'legacy-device',
                         status: 'Pendente',
                         createdAt: serverTimestamp()
                       });
@@ -986,25 +1063,28 @@ const TeacherDashboardPage = () => {
               )
             ) : (
               <div>
-                {/* Recent Tickets Section */}
-                <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-                  <h2 className="text-md font-semibold text-gray-800 mb-4">Chamados Recentes</h2>
-                  <div className="space-y-3">
-                    {recentTickets.map((ticket: { id: number; title: string; status: string; color: string }) => (
-                      <div key={ticket.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${ticket.color}`}></div>
-                          <span className="text-sm text-gray-700">{ticket.title}</span>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mt-6">
+                  <h3 className="font-bold text-slate-800 mb-4">Chamados Recentes desta Máquina</h3>
+                  {roomTickets.length === 0 ? (
+                    <p className="text-sm text-slate-500 italic">Nenhum chamado recente.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {roomTickets.map(ticket => (
+                        <div key={ticket.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${ticket.status === 'Pendente' ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                            <div>
+                              <p className="font-medium text-sm text-slate-700">{ticket.type}</p>
+                              {ticket.description && <p className="text-xs text-slate-500 truncate max-w-[200px]">{ticket.description}</p>}
+                            </div>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded-full ${ticket.status === 'Pendente' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {ticket.status}
+                          </span>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          ticket.status === 'Resolvido' ? 'bg-green-100 text-green-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {ticket.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
