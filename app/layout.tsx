@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'SchoolIT - Sistema de Chamados de TI Escolar',
   description: 'Plataforma para gerenciamento de chamados de TI nas escolas',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
