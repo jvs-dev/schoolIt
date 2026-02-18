@@ -1,9 +1,9 @@
 'use client';
 
-import { Wifi, MonitorSpeaker, Zap, Bot, CheckCircle, Send, Star, Lock, Monitor, Eye, EyeOff, Unlock, Home, Settings, LogOut, Bell, BellOff } from 'lucide-react';
+import { Wifi, MonitorSpeaker, Zap, Bot, CheckCircle, Send, Star, Lock, Monitor, Eye, EyeOff, Unlock, Home, Settings, LogOut, Bell, BellOff, Ticket } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { db, messaging } from '../../../lib/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, getDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, getDoc, setDoc, arrayUnion } from 'firebase/firestore';
 import { getToken } from 'firebase/messaging';
 
 async function hashPassword(password: string) {
@@ -122,6 +122,10 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
           });
           console.log('FCM Token:', token);
           setFcmToken(token);
+          // Save token to Firestore for notifications
+          await setDoc(doc(db, 'settings', 'notifications'), {
+            tokens: arrayUnion(token)
+          }, { merge: true });
         } catch (err) { 
           console.error('Error getting FCM token:', err);
         }
@@ -135,6 +139,10 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
             });
             console.log('FCM Token:', token);
             setFcmToken(token);
+            // Save token to Firestore for notifications
+            await setDoc(doc(db, 'settings', 'notifications'), {
+              tokens: arrayUnion(token)
+            }, { merge: true });
           } catch (err) {
             console.error('Error getting FCM token:', err);
           }
@@ -207,10 +215,27 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
       
       <div className="flex-1 flex flex-col overflow-y-auto w-full">
         {/* Mobile Top-bar */}
-        <div className="md:hidden flex-none flex items-center justify-between bg-slate-900 text-white p-4 w-full shadow-md z-10">
-          <span className="font-bold">SchoolIT Admin</span>
-          <div className="flex gap-2">
-            <button onClick={onLogout}>Sair</button>
+        <div className="md:hidden flex-none flex flex-col bg-slate-900 text-white w-full shadow-md z-10">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between p-4">
+            <span className="font-bold">SchoolIT Admin</span>
+            <button onClick={onLogout} className="text-sm bg-slate-800 px-3 py-1 rounded hover:bg-slate-700">Sair</button>
+          </div>
+
+          {/* Mobile Tabs */}
+          <div className="flex border-t border-slate-700">
+            <button 
+              onClick={() => setActiveTab('tickets')} 
+              className={`flex-1 py-3 text-sm flex justify-center items-center gap-2 transition-colors ${activeTab === 'tickets' ? 'bg-slate-800 border-b-2 border-blue-500 text-white' : 'text-slate-400'}`}
+            >
+              <Ticket size={16} /> Tickets
+            </button>
+            <button 
+              onClick={() => setActiveTab('settings')} 
+              className={`flex-1 py-3 text-sm flex justify-center items-center gap-2 transition-colors ${activeTab === 'settings' ? 'bg-slate-800 border-b-2 border-blue-500 text-white' : 'text-slate-400'}`}
+            >
+              <Settings size={16} /> Configs
+            </button>
           </div>
         </div>
         
@@ -504,6 +529,16 @@ const TeacherDashboardPage = () => {
       });
       setTicketId(docRef.id);
       setIsSuccess(true);
+      
+      // Trigger push notification
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Novo Chamado de TI',
+          body: `Problema: ${issueType} | Local: ${device.room || 'Não identificado'}`
+        })
+      }).catch(e => console.error('Push notification failed:', e));
     } catch (e) { 
       console.error(e); 
     }
@@ -840,6 +875,16 @@ const TeacherDashboardPage = () => {
                       setTicketId(docRef.id);
                       setQuickDescription(''); // Clear the input
                       setIsSuccess(true);
+                                      
+                      // Trigger push notification
+                      fetch('/api/notify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          title: 'Novo Chamado de TI',
+                          body: `Problema: Problema Personalizado | Local: ${device.room || 'Não identificado'}`
+                        })
+                      }).catch(e => console.error('Push notification failed:', e));
                     } catch (e) { console.error('Error creating custom ticket:', e); }
                   }}
                   disabled={!quickDescription.trim()}
