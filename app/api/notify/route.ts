@@ -37,6 +37,14 @@ try {
   // Send push notification using the Admin SDK
   const message = {
     notification: { title, body },
+    webpush: {
+      notification: {
+        icon: '/favicon.svg', // Adds the site logo
+      },
+      fcmOptions: {
+        link: '/', // Tells Firebase to open/focus the site natively when clicked
+      }
+    },
     tokens: tokens,
   };
   const response = await admin.messaging().sendEachForMulticast(message);
