@@ -36,7 +36,8 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
   const [loading, setLoading] = useState(true);
   const [selectedDescription, setSelectedDescription] = useState<string | null>(null);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'tickets' | 'settings'>('tickets');
+  const [activeTab, setActiveTab] = useState<'tickets' | 'settings' | 'inventory'>('tickets');
+  const [devices, setDevices] = useState<any[]>([]);
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [notifStatus, setNotifStatus] = useState<NotificationPermission | 'unknown'>('unknown');
 
@@ -73,6 +74,21 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
     
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory') return;
+
+    const q = query(collection(db, 'devices'), orderBy('registeredAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const devs: any[] = [];
+      snapshot.forEach((d) => devs.push({ id: d.id, ...(d.data() as any) }));
+      setDevices(devs);
+    }, (error) => {
+      console.error('Error fetching devices:', error);
+    });
+
+    return () => unsubscribe();
+  }, [activeTab]);
 
   const isToday = (date: any) => {
     if (!date) return false;
@@ -118,7 +134,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
       if (Notification.permission === 'granted') {
         try {
           const token = await getToken(messaging!, {
-            vapidKey: 'BNKC-3uFu2xTdDRjMl38VoEiw5rB1y0OGgIPk6x26QDNiU43XCubB59DPmAjhaFLCs501xALp6EhAmZ3Bire94o'
+            vapidKey: `${process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY}`
           });
           console.log('FCM Token:', token);
           setFcmToken(token);
@@ -135,7 +151,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
         if (permission === 'granted') {
           try {
             const token = await getToken(messaging!, {
-              vapidKey: 'BNKC-3uFu2xTdDRjMl38VoEiw5rB1y0OGgIPk6x26QDNiU43XCubB59DPmAjhaFLCs501xALp6EhAmZ3Bire94o'
+              vapidKey: `${process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY}`
             });
             console.log('FCM Token:', token);
             setFcmToken(token);
@@ -169,6 +185,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
   
   const navItems = [
     { id: 'tickets', label: 'Tickets Rápidos', icon: Home },
+    { id: 'inventory', label: 'Inventário', icon: Monitor },
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
@@ -193,7 +210,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
                 }`}
                 onClick={(e) => {
                   e.preventDefault();
-                  setActiveTab(item.id as 'tickets' | 'settings');
+                  setActiveTab(item.id as 'tickets' | 'settings' | 'inventory');
                 }}
               >
                 <item.icon size={20} className="mr-3" />
@@ -232,6 +249,12 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
               <Ticket size={16} /> Tickets
             </button>
             <button 
+              onClick={() => setActiveTab('inventory')} 
+              className={`flex-1 py-3 text-sm flex justify-center items-center gap-2 transition-colors ${activeTab === 'inventory' ? 'bg-slate-800 border-b-2 border-blue-500 text-white' : 'text-slate-400'}`}
+            >
+              <Monitor size={16} /> Inventário
+            </button>
+            <button 
               onClick={() => setActiveTab('settings')} 
               className={`flex-1 py-3 text-sm flex justify-center items-center gap-2 transition-colors ${activeTab === 'settings' ? 'bg-slate-800 border-b-2 border-blue-500 text-white' : 'text-slate-400'}`}
             >
@@ -244,7 +267,7 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
         {/* Top Header */}
         <div className="bg-white border-b p-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">{activeTab === 'tickets' ? 'Visão Geral' : 'Configurações'}</h2>
+            <h2 className="text-lg font-semibold">{activeTab === 'tickets' ? 'Visão Geral' : activeTab === 'inventory' ? 'Inventário' : 'Configurações'}</h2>
           </div>
         </div>
         
@@ -409,6 +432,46 @@ const ITDashboardView = ({ onLogout, globalAdminHash }: { onLogout: () => void, 
           </>
         )}
         
+        {activeTab === 'inventory' && (
+          <div className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {devices.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 col-span-full">Nenhum dispositivo cadastrado</div>
+              ) : (
+                devices.map((dev) => {
+                  const charger = dev.equipment?.charger || 'ok';
+                  const audio = dev.equipment?.audio || 'ok';
+                  const projector = dev.equipment?.projector || 'ok';
+                  const stateColor = (s: string) => s === 'ok' ? 'text-green-500' : s === 'broken' ? 'text-red-500' : 'text-orange-500';
+                  return (
+                    <div key={dev.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                      <div className="font-semibold text-slate-800">{dev.room || dev.machine || 'Sem identificação'}</div>
+                      <div className="text-xs text-slate-500 mb-3">{dev.floor || '-' } • {dev.machine || '-'}</div>
+
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Zap size={18} className={`${stateColor(charger)}`} />
+                          <div className="text-xs text-slate-600">Carregador: {charger.toUpperCase()}</div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <MonitorSpeaker size={18} className={`${stateColor(audio)}`} />
+                          <div className="text-xs text-slate-600">Áudio: {audio.toUpperCase()}</div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Monitor size={18} className={`${stateColor(projector)}`} />
+                          <div className="text-xs text-slate-600">Projetor: {projector.toUpperCase()}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'settings' && (
           <div className="p-4">
             <div className="bg-white p-6 rounded-xl shadow-sm max-w-md mx-auto">
@@ -630,11 +693,11 @@ const TeacherDashboardPage = () => {
     },
     { 
       icon: MonitorSpeaker, 
-      label: 'Projetor/Som', 
+      label: 'Sem Som', 
     },
     { 
       icon: Zap, 
-      label: 'Falta Cabo/Energia', 
+      label: 'Falta Carregador', 
     },
     { 
       icon: Bot, 
@@ -769,10 +832,27 @@ const TeacherDashboardPage = () => {
                   
                   <div className="flex flex-col space-y-3 pt-4">
                     <button 
-                      onClick={() => {
-                        const newDeviceData = { ...deviceData, id: crypto.randomUUID() };
+                      onClick={async () => {
+                        const newDeviceId = crypto.randomUUID();
+                        const newDeviceData = { ...deviceData, id: newDeviceId };
                         localStorage.setItem('schoolit_device', JSON.stringify(newDeviceData));
                         localStorage.setItem('schoolit_role', 'teacher');
+                        try {
+                          await setDoc(doc(db, 'devices', newDeviceId), {
+                            id: newDeviceId,
+                            room: deviceData.room,
+                            floor: deviceData.floor || '',
+                            machine: deviceData.machine || '',
+                            equipment: {
+                              charger: 'ok',
+                              audio: 'ok',
+                              projector: 'ok'
+                            },
+                            registeredAt: serverTimestamp()
+                          });
+                        } catch (e) {
+                          console.error('Error registering device:', e);
+                        }
                         setDeviceRole('teacher');
                       }}
                       className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
